@@ -8,7 +8,6 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const server = http.createServer(app);
 
-// CORS настройка
 const allowedOrigins = [
   'http://localhost:3000',
   process.env.RENDER_EXTERNAL_URL,
@@ -31,14 +30,12 @@ app.use(cors({
 
 app.use(express.json());
 
-// Serve static files из client/build
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, 'client/build');
-  console.log('📁 Serving static files from:', buildPath);
+  console.log('Serving static files from:', buildPath);
   app.use(express.static(buildPath));
 }
 
-// Хранилище данных
 const servers = {
   '1': {
     id: '1',
@@ -72,7 +69,6 @@ const friends = new Map();
 const directMessages = new Map();
 const conversations = new Map();
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -82,7 +78,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// REST API - Серверы
 app.get('/api/servers', (req, res) => {
   res.json(Object.values(servers));
 });
@@ -92,7 +87,6 @@ app.get('/api/servers/:serverId/channels', (req, res) => {
   res.json(server ? Object.values(server.channels) : []);
 });
 
-// Создание канала
 app.post('/api/servers/:serverId/channels', (req, res) => {
   const { name, type } = req.body;
   const server = servers[req.params.serverId];
@@ -110,11 +104,9 @@ app.post('/api/servers/:serverId/channels', (req, res) => {
 
   server.channels[channelId] = newChannel;
   io.emit('channel:created', { serverId: server.id, channel: newChannel });
-  
   res.json(newChannel);
 });
 
-// Удаление канала
 app.delete('/api/servers/:serverId/channels/:channelId', (req, res) => {
   const server = servers[req.params.serverId];
   
@@ -123,20 +115,14 @@ app.delete('/api/servers/:serverId/channels/:channelId', (req, res) => {
   }
 
   delete server.channels[req.params.channelId];
-  io.emit('channel:deleted', { 
-    serverId: server.id, 
-    channelId: req.params.channelId 
-  });
-  
+  io.emit('channel:deleted', { serverId: server.id, channelId: req.params.channelId });
   res.json({ success: true });
 });
 
-// Сообщения канала
 app.get('/api/channels/:channelId/messages', (req, res) => {
   res.json(messages[req.params.channelId] || []);
 });
 
-// Поиск пользователей
 app.get('/api/users/search', (req, res) => {
   const query = req.query.q?.toLowerCase() || '';
   const currentUserId = req.query.userId;
@@ -146,36 +132,27 @@ app.get('/api/users/search', (req, res) => {
   }
 
   const results = Array.from(allUsers.values())
-    .filter(user => 
-      user.id !== currentUserId && 
-      user.username.toLowerCase().includes(query)
-    )
+    .filter(user => user.id !== currentUserId && user.username.toLowerCase().includes(query))
     .slice(0, 20);
   
   res.json(results);
 });
 
-// Получить всех пользователей онлайн
 app.get('/api/users/online', (req, res) => {
   res.json(Array.from(users.values()));
 });
 
-// Получить друзей пользователя
 app.get('/api/users/:userId/friends', (req, res) => {
   const userFriends = friends.get(req.params.userId) || [];
-  const friendsData = userFriends
-    .map(friendId => allUsers.get(friendId))
-    .filter(Boolean);
+  const friendsData = userFriends.map(friendId => allUsers.get(friendId)).filter(Boolean);
   res.json(friendsData);
 });
 
-// Получить заявки в друзья
 app.get('/api/users/:userId/friend-requests', (req, res) => {
   const requests = friendRequests.get(req.params.userId) || [];
   res.json(requests);
 });
 
-// Получить DM беседы
 app.get('/api/users/:userId/conversations', (req, res) => {
   const userConversations = directMessages.get(req.params.userId) || [];
   const conversationsData = userConversations.map(convId => {
@@ -195,16 +172,13 @@ app.get('/api/users/:userId/conversations', (req, res) => {
   res.json(conversationsData);
 });
 
-// Получить сообщения DM беседы
 app.get('/api/conversations/:conversationId/messages', (req, res) => {
   res.json(dmMessages[req.params.conversationId] || []);
 });
 
-// Socket.IO События
 io.on('connection', (socket) => {
-  console.log('👤 Пользователь подключился:', socket.id);
+  console.log('User connected:', socket.id);
 
-  // Регистрация пользователя
   socket.on('user:register', (userData) => {
     const user = {
       id: userData.id || uuidv4(),
@@ -222,13 +196,10 @@ io.on('connection', (socket) => {
     io.emit('users:update', Array.from(users.values()));
   });
 
-  // Присоединение к каналу
   socket.on('channel:join', (channelId) => {
     socket.join(channelId);
-    console.log(`User ${socket.userId} joined channel: ${channelId}`);
   });
 
-  // Отправка сообщения в канал
   socket.on('message:send', (data) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -245,11 +216,9 @@ io.on('connection', (socket) => {
       messages[data.channelId] = [];
     }
     messages[data.channelId].push(message);
-
     io.to(data.channelId).emit('message:receive', message);
   });
 
-  // ДРУЗЬЯ - Отправка заявки
   socket.on('friend:request', (data) => {
     const sender = users.get(socket.id);
     if (!sender) return;
@@ -266,8 +235,7 @@ io.on('connection', (socket) => {
     }
     friendRequests.get(data.userId).push(request);
 
-    const recipientSocket = Array.from(users.entries())
-      .find(([_, user]) => user.id === data.userId)?.[0];
+    const recipientSocket = Array.from(users.entries()).find(([_, user]) => user.id === data.userId)?.[0];
     
     if (recipientSocket) {
       io.to(recipientSocket).emit('friend:request:received', request);
@@ -276,7 +244,6 @@ io.on('connection', (socket) => {
     socket.emit('friend:request:sent', { userId: data.userId });
   });
 
-  // ДРУЗЬЯ - Принятие заявки
   socket.on('friend:accept', (data) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -319,8 +286,7 @@ io.on('connection', (socket) => {
       conversationId 
     });
 
-    const friendSocket = Array.from(users.entries())
-      .find(([_, u]) => u.id === data.userId)?.[0];
+    const friendSocket = Array.from(users.entries()).find(([_, u]) => u.id === data.userId)?.[0];
     
     if (friendSocket) {
       io.to(friendSocket).emit('friend:added', { 
@@ -330,7 +296,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ДРУЗЬЯ - Отклонение заявки
   socket.on('friend:reject', (data) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -344,13 +309,10 @@ io.on('connection', (socket) => {
     socket.emit('friend:request:rejected', { userId: data.userId });
   });
 
-  // DM - Присоединение к беседе
   socket.on('conversation:join', (conversationId) => {
     socket.join(conversationId);
-    console.log(`User ${socket.userId} joined conversation: ${conversationId}`);
   });
 
-  // DM - Отправка сообщения
   socket.on('dm:send', (data) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -367,11 +329,9 @@ io.on('connection', (socket) => {
       dmMessages[data.conversationId] = [];
     }
     dmMessages[data.conversationId].push(message);
-
     io.to(data.conversationId).emit('dm:receive', message);
   });
 
-  // Индикатор печати
   socket.on('typing:start', (data) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -389,44 +349,26 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Отключение
   socket.on('disconnect', () => {
     const user = users.get(socket.id);
     if (user) {
       allUsers.delete(user.id);
-      console.log('👤 Пользователь отключился:', user.username);
+      console.log('User disconnected:', user.username);
     }
     users.delete(socket.id);
     io.emit('users:update', Array.from(users.values()));
   });
 });
 
-// Serve React app (ДОЛЖНО БЫТЬ ПОСЛЕДНИМ!)
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, 'client/build', 'index.html');
-    console.log('📄 Serving index.html from:', indexPath);
     res.sendFile(indexPath);
   });
 }
 
-// Запуск сервера
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('===========================================');
-  console.log(`🚀 Сервер запущен!`);
-  console.log(`📍 Порт: ${PORT}`);
-  console.log(`📝 Режим: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Host: 0.0.0.0`);
-  console.log('===========================================');
-});
-
-// Обработка ошибок
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.log('Server running on port', PORT);
 });
