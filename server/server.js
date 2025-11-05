@@ -388,3 +388,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`📝 Режим: ${process.env.NODE_ENV || 'development'}`);
 });
+
+});
