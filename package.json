@@ -10,10 +10,7 @@
     "start": "node server.js",
     "dev": "NODE_ENV=development node server.js"
    {
-  "scripts": {
-    "build": "npm install && cd client && npm install && npm run build"
-  }
-}
+
   
   
   },
@@ -27,4 +24,5 @@
     "node": "18.x"
   }
 }
+
 
